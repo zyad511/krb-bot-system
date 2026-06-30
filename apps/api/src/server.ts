@@ -305,7 +305,12 @@ app.get('/', (req, res) => {
             <div class="card">
                 <form action="/api/send-custom" method="POST">
                     <label>معرف السيرفر المستهدف (Guild ID) *</label>
-                    <input type="text" name="guildId" required>
+                    <input type="text" name="guildId" required placeholder="اترك الحقل فارغاً إذا كنت تريد الإرسال للكل...">
+                    <label>نوع الإرسال</label>
+                    <select name="sendType">
+                        <option value="single">سيرفر محدد فقط (باستخدام الـ ID أعلاه)</option>
+                        <option value="all">إرسال شامل لجميع السيرفرات (Broadcast) 📢</option>
+                    </select>
                     <label>نص الرسالة أو الإعلان الإداري</label>
                     <textarea name="message" rows="3" required placeholder="اكتب هنا..."></textarea>
                     <button type="submit" class="btn">إطلق الإرسال الفوري 🚀</button>
@@ -440,6 +445,7 @@ app.post('/api/approve-bot', async (req, res) => {
     } catch (error: any) { res.status(500).send(error.message); }
 });
 
+// 🚀 دالة الإرسال المحدثة بنظامين (سيرفر محدد أو إرسال جماعي للكل بنفس الدالة القديمة السريعة)
 app.post('/api/send-custom', async (req, res) => {
     const cookies = parseCookies(req.headers.cookie);
     const sessionId = cookies['krb_session'];
@@ -447,14 +453,36 @@ app.post('/api/send-custom', async (req, res) => {
     
     if (!session || session.userId !== DEVELOPER_ID) return res.status(403).send('للإدارة العليا فقط.');
 
-    const { guildId, message } = req.body;
+    const { guildId, sendType, message } = req.body;
+
+    // الخيار الأول: الإرسال الشامل لكل السيرفرات المتصل بها البوت
+    if (sendType === 'all') {
+        let successCount = 0;
+        client.guilds.cache.forEach((guild) => {
+            const targetChannel = guild.channels.cache.find(ch => ch.isTextBased() && ch.permissionsFor(guild.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
+            if (targetChannel) {
+                targetChannel.send(message).catch(() => {});
+                successCount++;
+            }
+        });
+        return res.send(`<script>alert("📢 تم إطلاق الإرسال الشامل بنجاح إلى ${successCount} سيرفر!"); window.location.href="/";</script>`);
+    }
+
+    // الخيار الثاني: نظام الإرسال القديم المباشر لسيرفر واحد عن طريق الـ ID
+    if (!guildId) return res.status(400).send('الرجاء كتابة معرف السيرفر (Guild ID) للإرسال الفردي.');
+    
     try {
         const guild = await client.guilds.fetch(guildId);
+        // تم إرجاع الطريقة القديمة الفورية للبحث عن أول قناة نصية وإرسال الرسالة لها مباشرة
         const targetChannel = guild.channels.cache.find(ch => ch.isTextBased() && ch.permissionsFor(guild.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
-        if (!targetChannel) return res.status(400).send('تعذر العثور على قناة.');
+        
+        if (!targetChannel) return res.status(400).send('تعذر العثور على قناة نصية يمتلك البوت صلاحية الكتابة فيها داخل هذا السيرفر.');
+        
         await targetChannel.send(message);
-        res.send(`<script>alert("🚀 تم إرسال الرسالة بنجاح!"); window.location.href="/";</script>`);
-    } catch (error: any) { res.status(500).send(error.message); }
+        res.send(`<script>alert("🚀 تم إرسال الرسالة الفردية بنجاح!"); window.location.href="/";</script>`);
+    } catch (error: any) { 
+        res.status(500).send(`فشل الإرسال: ${error.message}`); 
+    }
 });
 
 app.post('/api/blacklist', (req, res) => {
