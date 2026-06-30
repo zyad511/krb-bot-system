@@ -1,0 +1,19 @@
+{
+  "name": "krb-security-infrastructure",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build:bot": "npm run build --prefix apps/bot",
+    "build:api": "npm run build --prefix apps/api",
+    "build:dashboard": "npm run build --prefix apps/dashboard",
+    "start:bot": "npm run start --prefix apps/bot",
+    "start:api": "npm run start --prefix apps/api",
+    "start:dashboard": "npm run start --prefix apps/dashboard"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
