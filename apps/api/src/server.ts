@@ -34,14 +34,21 @@ interface IsolatedBot {
 }
 const isolatedBots = new Map<string, IsolatedBot>();
 
-// 🔒 إعدادات الحماية الصارمة الخاصة بأبو عتب
-const DEVELOPER_ID = '1065985362658345040'; // حساب أبو عتب
-const WEB_USERNAME = 'KRB1';               // اسم المستخدم الجديد لحماية الموقع
-const WEB_PASSWORD = 'KRB511511';           // كلمة المرور الجديدة لحماية الموقع
-const PREFIX = '.';
-
+interface TicketSession {
+    step: number;
+    category: string;
+    image?: string;
+    title?: string;
+    desc?: string;
+}
 // ذاكرة مؤقتة لجمع بيانات إعداد التكت خطوة بخطوة
-const ticketSetupSession = new Map<string, { step: number; category: string; image?: string; title?: string; desc?: string }>();
+const ticketSetupSession = new Map<string, TicketSession>();
+
+// 🔒 إعدادات الحماية الصارمة الخاصة بـ KRB
+const DEVELOPER_ID = '1065985362658345040'; 
+const WEB_USERNAME = 'KRB1';               
+const WEB_PASSWORD = 'KRB511511';           
+const PREFIX = '.';
 
 const client = new Client({
     intents: [
@@ -106,7 +113,7 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 // ==========================================
-// ⚔️ نظام الأوامر المحمي والمخصص (أبو عتب فقط)
+// ⚔️ نظام الأوامر المحمي والمخصص
 // ==========================================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
@@ -158,12 +165,12 @@ client.on('messageCreate', async (message) => {
 
                 if (ticketChannel) {
                     const customEmbed = new EmbedBuilder()
-                        .setTitle(session.title)
-                        .setDescription(`${session.desc}\n\n صاحب التذكرة: <@${message.author.id}>`)
+                        .setTitle(session.title || 'تذكرة جديدة')
+                        .setDescription(`${session.desc || ''}\n\n صاحب التذكرة: <@${message.author.id}>`)
                         .setColor('#000000');
 
-                    // إذا وضع رابط صورة صالح نقوم بإضافته فوراً
-                    if (session.image.startsWith('http')) {
+                    // حماية وتجنب الـ undefined لتخطي أخطاء الـ TypeScript الصارمة
+                    if (session.image && session.image.startsWith('http')) {
                         customEmbed.setImage(session.image);
                     }
 
@@ -207,7 +214,7 @@ client.on('messageCreate', async (message) => {
         return message.channel.send({ embeds: [helpEmbed] });
     }
 
-    // 🔒 جدار التحقق الفوري لجميع الأوامر التالية (أبو عتب فقط)
+    // 🔒 جدار التحقق الفوري لجميع الأوامر التالية (المطور فقط)
     if (message.author.id !== DEVELOPER_ID) {
         return message.reply('❌ **منت صاحب البوت!** هذا الأمر مخصص للإدارة العليا فقط.').catch(() => {});
     }
@@ -244,7 +251,7 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'lock') {
         await (message.channel as TextChannel).permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
-        await message.channel.send('🔒 **تم إغلاق القناة النصية بنجاح بأمر من صاحب البوت.**');
+        await message.channel.send('🔒 **تم إغلاق القناء النصية بنجاح بأمر من صاحب البوت.**');
     }
 
     if (command === 'unlock') {
@@ -440,7 +447,7 @@ app.get('/', (req, res) => {
     <body>
         <header>
             <h2>KRB CONTROL INFRASTRUCTURE</h2>
-            <span style="color:var(--accent-green)">🔒 مصرح ومحمي بالكامل (مرحباً أبو عتب)</span>
+            <span style="color:var(--accent-green)">🔒 مصرح ومحمي بالكامل</span>
         </header>
 
         <h3 class="section-title">🤖 رادار طلبات توثيق وفك عزل البوتات</h3>
