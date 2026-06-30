@@ -48,7 +48,8 @@ client.once('ready', async () => {
   console.log(`[KRB SECURITY] ${client.user?.tag} Is Now Online & Protecting.`);
   client.user?.setActivity({ name: '.help | /help | KRB System', type: 4 });
 
-  const commandsData = [
+  // تحديد النوع كـ any[] لمنع التضارب البرمجي في التحقق من الخيارات (TS2345)
+  const commandsData: any[] = [
     { name: 'help', description: 'عرض لوحة التحكم الكاملة والفخمة للنظام' },
     { name: 'status', description: 'عرض حالة الأنظمة الأمنية والوايت ليست' },
     { name: 'lock', description: 'إغلاق الشات الحالي فوراً' },
@@ -68,8 +69,11 @@ client.once('ready', async () => {
     }
   ];
 
-  await client.application?.commands.set(commandsData).catch(() => {});
-  console.log('[KRB SLASH] All advanced slash commands registered globally.');
+  // التأكد التام من أن الكائن ليس undefined لمنع الخطأ (TS2532)
+  if (client.application) {
+    await client.application.commands.set(commandsData).catch(() => {});
+    console.log('[KRB SLASH] All advanced slash commands registered globally.');
+  }
 });
 
 // ==========================================
@@ -104,14 +108,14 @@ client.on('messageCreate', async (message) => {
         `\`ticket setup menu\` ➔ لوحة تكت قائمة منسدلة فخمة\n\n` +
         `🎮 **قسم الألعاب والترفيه والجوائز (Premium):**\n` +
         `\`blackjack <bet>\` ➔ لعبة القمار العالمية بلاك جاك الفخمة\n` +
-        `\`giveaway <الركائز> <عدد الفائزين>\` ➔ بدء قيفاواي فوري بالأزرار\n` +
+        `\`giveaway <الجائزة> <عدد الفائزين>\` ➔ بدء قيفاواي فوري بالأزرار\n` +
         `ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ ـ`
       )
       .setFooter({ text: 'Minimalist AirFlow Standard • KRB V2' });
     await message.reply({ embeds: [embed] });
   }
 
-  // أوامر القفل والفتح (حل مشكلة permissionOverwrites بـ Type Guard)
+  // أوامر القفل والفتح
   if (command === 'lock' || command === 'unlock') {
     if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) return;
     if (message.channel.type !== ChannelType.GuildText) return;
@@ -218,14 +222,11 @@ client.on('messageCreate', async (message) => {
 // ==========================================
 client.on('interactionCreate', async (interaction: Interaction) => {
   if (!interaction.guild) return;
-
-  // حل مشكلة deferReply و editReply الجوهرية (التأكد من أن التفاعل قابل للرد المباشر)
   if (!interaction.isRepliable()) return;
 
-  // أ) معالجة أوامر الشافعي والـ Slash (/)
+  // أ) معالجة أوامر الـ Slash (/)
   if (interaction.isChatInputCommand()) {
     const { commandName } = interaction;
-    const serverIcon = interaction.guild.iconURL({ forceStatic: false }) || undefined;
 
     if (commandName === 'help') {
       const embed = new EmbedBuilder()
@@ -269,7 +270,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
     }
   }
 
-  // ب) معالجة نقرات الأزرار التفاعلية وقنوات التكت والالعاب والقيفاواي
+  // ب) معالجة نقرات الأزرار التفاعلية
   if (interaction.isButton()) {
     const customId = interaction.customId;
 
@@ -284,7 +285,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
         game.cards[0] += newCard;
 
         if (game.cards[0] > 21) {
-          const embed = new EmbedBuilder().setTitle('💥 خسرت الفايفاوي! (Bust)').setDescription(`مجموع أوراقك تجاوز الـ 21 وجاء: \`${game.cards[0]}\`\nخسرت الرهان المقدر بـ \`${game.bet}💸\``).setColor('#000000');
+          const embed = new EmbedBuilder().setTitle('💥 خسرت الجولة! (Bust)').setDescription(`مجموع أوراقك تجاوز الـ 21 وجاء: \`${game.cards[0]}\`\nخسرت الرهان المقدر بـ \`${game.bet}💸\``).setColor('#000000');
           await interaction.editReply({ embeds: [embed], components: [] });
           activeBlackjack.delete(interaction.user.id);
         } else {
@@ -305,12 +306,12 @@ client.on('interactionCreate', async (interaction: Interaction) => {
       }
     }
 
-    // زر نظام القيفاواي بالأزرار (Giveaway Join System)
+    // زر نظام القيفاواي
     if (customId.startsWith('g_join_')) {
       await interaction.reply({ content: '✅ تم تسجيل دخولك في السحب بنجاح! حظاً موفقاً.', ephemeral: true });
     }
 
-    // أزرار التكت والتدمير
+    // أزرار التكت
     let ticketType = '';
     if (customId === 'tk_general') ticketType = 'دعم-عام';
     if (customId === 'tk_report') ticketType = 'شكوى-بلاغ';
