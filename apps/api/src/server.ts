@@ -30,14 +30,14 @@ interface IsolatedBot {
 }
 const isolatedBots = new Map<string, IsolatedBot>();
 
-// ⚙️ إعدادات الهوية والاتصال المباشر (تعديل أبو عتب)
+// ⚙️ إعدادات الهوية والاتصال المباشر
 const DEVELOPER_ID = '1065985362658345040'; 
 const PREFIX = '.';
 
-// 📋 ضع بيانات بوتك هنا مباشرة ليتصل بالـ Dashboard فوراً
-const CLIENT_ID = 'ضع_هنا_آيدي_البوت_الخاص_بك'; 
-const CLIENT_SECRET = 'ضع_هنا_الـ_Client_Secret_الخاص_بالبوت'; 
-const REDIRECT_URI = 'https://krb-security-system.onrender.com/auth/callback';
+// 🌐 استدعاء الرموز السحابية تلقائياً من إعدادات رندر الحالية لديك
+const CLIENT_ID = process.env.CLIENT_ID || ''; 
+const CLIENT_SECRET = process.env.CLIENT_SECRET || ''; 
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://krb-security-system.onrender.com/auth/callback';
 
 // ذاكرة الجلسات للموقع
 interface UserSession {
@@ -83,7 +83,6 @@ client.on('guildMemberAdd', async (member) => {
 
     if (!whitelistedBots.has(member.user.id)) {
         try {
-            // الفحص الذكي لصلاحية الـ Administrator لمنع ثغرات التخريب
             const hasAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
 
             let inviterTag = "غير معروف";
@@ -100,7 +99,6 @@ client.on('guildMemberAdd', async (member) => {
                 console.log("تعذر قراءة سجل الـ Audit Log.");
             }
 
-            // حفظ بيانات البوت في السجن لعرضه بالـ Dashboard
             isolatedBots.set(member.id, {
                 id: member.id,
                 tag: member.user.tag,
@@ -113,7 +111,6 @@ client.on('guildMemberAdd', async (member) => {
             const sysChannel = member.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.permissionsFor(member.guild.members.me!).has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
 
             if (hasAdmin) {
-                // إذا دخل ومعه صلاحية أدمن يتم طرده فوراً لحماية السيرفر
                 if (member.kickable) {
                     await member.kick('KRB Security: Unwhitelisted bot joined with Administrator permissions.');
                     if (sysChannel) {
@@ -125,7 +122,6 @@ client.on('guildMemberAdd', async (member) => {
                     }
                 }
             } else {
-                // البوتات العادية يتم تجريدها وعزلها بـ Timeout
                 if (member.manageable) {
                     await member.roles.set([]).catch(() => {});
                 }
@@ -147,7 +143,6 @@ client.on('guildMemberAdd', async (member) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // جدار البلاك ليست العالمي
     if (blacklistedUsers.has(message.author.id) || blacklistedGuilds.has(message.guild.id)) {
         if (message.content.startsWith(PREFIX)) {
             await message.reply(`❌ **أنت مدرج في القائمة السوداء للنظام.**\n⚠️ للتظلم تواصل مع المطور: <@${DEVELOPER_ID}>`).catch(() => {});
@@ -159,7 +154,6 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift()?.toLowerCase();
 
-    // الأمر الوحيد الصامد والمحدث برابط موقعك الفخم
     if (command === 'help') {
         const helpEmbed = new EmbedBuilder()
             .setTitle('🔳 **نظام الحماية العالمي KRB SECURITY**')
@@ -167,7 +161,7 @@ client.on('messageCreate', async (message) => {
             .setColor('#000000')
             .addFields(
                 { name: '🛡️ آلية عمل الحماية', value: 'بمجرد دخول أي بوت غير موثق للسيرفر، يتم فحصه وعزله أو طرده تلقائياً بناءً على صلاحياته.' },
-                { name: '🌐 لوحة التحكم الإدارية (Dashboard)', value: `يمكن لمدراء السيرفرات والمطور إدارة الحماية وتوثيق البوتات عبر الرابط التالي:\n🔗 **[اضغط هنا للانتقال للموقع](https://krb-security-system.onrender.com)**` }
+                { name: '🌐 لوحة التحكم الإدارية (Dashboard)', value: `يمكن لمدراء السيرفرات والمطور إدارة الحماية وتوثيق البوتات عبر الرابط التالي:\n🔗 **[اضغط هنا للانتقال للموقع](${REDIRECT_URI.replace('/auth/callback', '')})**` }
             )
             .setFooter({ text: 'KRB Infrastructure • نظام حماية سحابي متكامل' });
 
@@ -178,7 +172,6 @@ client.on('messageCreate', async (message) => {
 // ==========================================
 // 🌐 واجهة الـ Dashboard وبوابات الـ OAuth2
 // ==========================================
-
 app.get('/', (req, res) => {
     const cookies = parseCookies(req.headers.cookie);
     const sessionId = cookies['krb_session'];
