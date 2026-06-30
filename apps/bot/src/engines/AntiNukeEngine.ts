@@ -1,4 +1,4 @@
-import { Guild, GuildAuditLogs, PermissionFlagsBits, Channel } from 'discord.js';
+import { Guild, AuditLogEvent, Channel } from 'discord.js';
 import { CacheManager } from '../database/CacheManager';
 import { GuildConfig } from '../database/GuildConfig';
 
@@ -16,14 +16,13 @@ export class AntiNukeEngine {
     const rule = config.antiNuke.channelDelete;
     if (!rule || !rule.enabled) return;
 
-    // جلب الـ Audit Logs لمعرفة المسؤول عن حذف الروم
-    const auditLogs = await guild.fetchAuditLogs({ limit: 1, type: 65 }).catch(() => null); // 65 = CHANNEL_DELETE
+    // تم التعديل هنا: استخدام AuditLogEvent.ChannelDelete بدلاً من الرقم 65
+    const auditLogs = await guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.ChannelDelete }).catch(() => null);
     const entry = auditLogs?.entries.first();
     if (!entry || !entry.executor || entry.executor.id === guild.client.user?.id) return;
 
     const executorId = entry.executor.id;
 
-    // استثناء الموثوقين والوايت ليست
     if (config.trustedUsers.includes(executorId) || guild.ownerId === executorId) return;
 
     const rateLimitKey = `antinuke:${guild.id}:${executorId}:channelDelete`;
