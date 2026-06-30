@@ -34,9 +34,10 @@ interface IsolatedBot {
 }
 const isolatedBots = new Map<string, IsolatedBot>();
 
-// 🔒 إعدادات الحماية والتحقق الإداري لأبو عتب
+// 🔒 إعدادات الحماية الصارمة الخاصة بأبو عتب
 const DEVELOPER_ID = '1065985362658345040'; // حساب أبو عتب
-const WEB_PASSWORD = 'KRB_SECRET_2026';     // كلمة مرور حماية الموقع (غيرها براحتك)
+const WEB_USERNAME = 'KRB1';               // اسم المستخدم الجديد لحماية الموقع
+const WEB_PASSWORD = 'KRB511511';           // كلمة المرور الجديدة لحماية الموقع
 const PREFIX = '.';
 
 // ذاكرة مؤقتة لجمع بيانات إعداد التكت خطوة بخطوة
@@ -324,13 +325,14 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// 🌐 واجهة الموقع المحمية بكلمة مرور (جدار الحماية المنيع)
+// 🌐 واجهة الموقع المحمية المحدثة بالكامل بالاسم والباسورد
 // ==========================================
 app.get('/', (req, res) => {
-    // التحقق من كلمة المرور الممررة عبر الرابط للتأمين الكامل
+    const username = req.query.username;
     const password = req.query.password;
 
-    if (password !== WEB_PASSWORD) {
+    // جدار الحماية الجديد: التحقق من اسم المستخدم وكلمة المرور معاً
+    if (username !== WEB_USERNAME || password !== WEB_PASSWORD) {
         return res.send(`
         <!DOCTYPE html>
         <html lang="ar" dir="rtl">
@@ -342,16 +344,27 @@ app.get('/', (req, res) => {
             <style>
                 body { background: #000; color: #fff; font-family: 'Cairo', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin:0; }
                 .login-box { background: #09090b; padding: 30px; border-radius: 8px; border: 1px solid #27272a; text-align: center; width: 90%; max-width: 400px; }
-                h2 { font-size: 18px; margin-bottom: 20px; }
-                input { width: 100%; padding: 12px; background: #18181b; border: 1px solid #27272a; color: #fff; border-radius: 6px; text-align: center; font-size: 14px; margin-bottom: 15px; box-sizing: border-box; }
-                button { width: 100%; padding: 12px; background: #fff; color: #000; font-weight:700; border: none; border-radius:6px; cursor: pointer; }
+                h2 { font-size: 18px; margin-bottom: 25px; font-weight: 700; color: #fff; }
+                .input-group { text-align: right; margin-bottom: 15px; }
+                label { display: block; font-size: 12px; color: #a1a1aa; margin-bottom: 5px; font-weight: 600; }
+                input { width: 100%; padding: 12px; background: #18181b; border: 1px solid #27272a; color: #fff; border-radius: 6px; font-size: 14px; box-sizing: border-box; transition: 0.2s; }
+                input:focus { border-color: #fff; outline: none; }
+                button { width: 100%; padding: 12px; background: #fff; color: #000; font-weight:700; border: none; border-radius:6px; cursor: pointer; font-size: 14px; margin-top: 10px; }
+                button:hover { background: #e4e4e7; }
             </style>
         </head>
         <body>
             <div class="login-box">
                 <h2>🔒 جدار حماية لوحة تحكم KRB</h2>
                 <form method="GET" action="/">
-                    <input type="password" name="password" placeholder="أدخل كلمة مرور النظام السري..." required>
+                    <div class="input-group">
+                        <label>اسم المستخدم</label>
+                        <input type="text" name="username" placeholder="أدخل اسم المستخدم المعين..." required>
+                    </div>
+                    <div class="input-group">
+                        <label>كلمة المرور السرية</label>
+                        <input type="password" name="password" placeholder="أدخل الرقم السري المعين..." required>
+                    </div>
                     <button type="submit">تسجيل الدخول والتحقق الأمني</button>
                 </form>
             </div>
@@ -360,7 +373,7 @@ app.get('/', (req, res) => {
         `);
     }
 
-    // إذا كانت كلمة المرور صحيحة يتم عرض لوحة التحكم الكاملة
+    // إذا كانت البيانات صحيحة 100%، يتم فتح لوحة التحكم
     let quarantineCards = '';
     isolatedBots.forEach((bot) => {
         quarantineCards += `
@@ -372,7 +385,7 @@ app.get('/', (req, res) => {
                 <p><strong>الداعي الفعلي:</strong> ${bot.invitedBy}</p>
             </div>
             <div class="card-actions">
-                <form action="/api/approve-bot?password=${WEB_PASSWORD}" method="POST" style="width:100%;">
+                <form action="/api/approve-bot?username=${WEB_USERNAME}&password=${WEB_PASSWORD}" method="POST" style="width:100%;">
                     <input type="hidden" name="botId" value="${bot.id}">
                     <input type="hidden" name="guildId" value="${bot.guildId}">
                     <button type="submit" class="btn btn-approve">توثيق وموافقة كـ KRB ✅</button>
@@ -427,7 +440,7 @@ app.get('/', (req, res) => {
     <body>
         <header>
             <h2>KRB CONTROL INFRASTRUCTURE</h2>
-            <span style="color:var(--accent-green)">🔒 مصرح ومحمي بالكامل</span>
+            <span style="color:var(--accent-green)">🔒 مصرح ومحمي بالكامل (مرحباً أبو عتب)</span>
         </header>
 
         <h3 class="section-title">🤖 رادار طلبات توثيق وفك عزل البوتات</h3>
@@ -436,7 +449,7 @@ app.get('/', (req, res) => {
         <h3 class="section-title">⚙️ أدوات النطاق والتحكم عن بعد</h3>
         <div class="grid">
             <div class="card">
-                <form action="/api/send-custom?password=${WEB_PASSWORD}" method="POST">
+                <form action="/api/send-custom?username=${WEB_USERNAME}&password=${WEB_PASSWORD}" method="POST">
                     <label>معرف السيرفر المستهدف (Guild ID) *</label>
                     <input type="text" name="guildId" required>
                     <label>نص الرسالة</label>
@@ -446,7 +459,7 @@ app.get('/', (req, res) => {
             </div>
 
             <div class="card">
-                <form action="/api/blacklist?password=${WEB_PASSWORD}" method="POST">
+                <form action="/api/blacklist?username=${WEB_USERNAME}&password=${WEB_PASSWORD}" method="POST">
                     <label>نوع الحظر</label>
                     <select name="type">
                         <option value="user">حظر مستخدم (User ID)</option>
@@ -479,10 +492,10 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 🚀 حماية الـ APIs بكلمة المرور لضمان عدم الاختراق
+// 🚀 حماية الـ APIs ببيانات الاعتماد الكاملة لضمان عدم الاختراق من الخلفية
 // ==========================================
 app.post('/api/approve-bot', async (req, res) => {
-    if (req.query.password !== WEB_PASSWORD) return res.status(403).send('غير مصرح لك.');
+    if (req.query.username !== WEB_USERNAME || req.query.password !== WEB_PASSWORD) return res.status(403).send('غير مصرح لك.');
     const { botId, guildId } = req.body;
     try {
         whitelistedBots.add(botId);
@@ -494,24 +507,24 @@ app.post('/api/approve-bot', async (req, res) => {
             const sysChannel = guild.channels.cache.find(c => c.type === ChannelType.GuildText) as TextChannel;
             if (sysChannel) sysChannel.send(`✅ **[KRB SECURITY]:** تم توثيق البوت وفك العزل عنه.`);
         }
-        res.send(`<script>alert("✅ تم توثيق البوت!"); window.location.href="/?password=${WEB_PASSWORD}";</script>`);
+        res.send(`<script>alert("✅ تم توثيق البوت!"); window.location.href="/?username=${WEB_USERNAME}&password=${WEB_PASSWORD}";</script>`);
     } catch (error: any) { res.status(500).send(error.message); }
 });
 
 app.post('/api/send-custom', async (req, res) => {
-    if (req.query.password !== WEB_PASSWORD) return res.status(403).send('غير مصرح لك.');
+    if (req.query.username !== WEB_USERNAME || req.query.password !== WEB_PASSWORD) return res.status(403).send('غير مصرح لك.');
     const { guildId, message } = req.body;
     try {
         const guild = await client.guilds.fetch(guildId);
         const targetChannel = guild.channels.cache.find(ch => ch.isTextBased() && ch.permissionsFor(guild.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
         if (!targetChannel) return res.status(400).send('قناة غير صالحة.');
         await targetChannel.send(message);
-        res.send(`<script>alert("🚀 تم الإرسال!"); window.location.href="/?password=${WEB_PASSWORD}";</script>`);
+        res.send(`<script>alert("🚀 تم الإرسال!"); window.location.href="/?username=${WEB_USERNAME}&password=${WEB_PASSWORD}";</script>`);
     } catch (error: any) { res.status(500).send(error.message); }
 });
 
 app.post('/api/blacklist', (req, res) => {
-    if (req.query.password !== WEB_PASSWORD) return res.status(403).send('غير مصرح لك.');
+    if (req.query.username !== WEB_USERNAME || req.query.password !== WEB_PASSWORD) return res.status(403).send('غير مصرح لك.');
     const { type, targetId, action } = req.body;
     if (action === 'add') {
         if (type === 'user') blacklistedUsers.add(targetId);
@@ -520,13 +533,13 @@ app.post('/api/blacklist', (req, res) => {
         if (type === 'user') blacklistedUsers.delete(targetId);
         if (type === 'guild') blacklistedGuilds.delete(targetId);
     }
-    res.send(`<script>alert("🔒 تم تحديث البلاك ليست!"); window.location.href="/?password=${WEB_PASSWORD}";</script>`);
+    res.send(`<script>alert("🔒 تم تحديث البلاك ليست!"); window.location.href="/?username=${WEB_USERNAME}&password=${WEB_PASSWORD}";</script>`);
 });
 
 app.listen(PORT, () => {
     if (process.env.DISCORD_TOKEN) {
         client.login(process.env.DISCORD_TOKEN);
     } else {
-        console.error('❌ DISCORD_TOKEN مفقود في Render!');
+        console.error('❌ DISCORD_TOKEN مفقود في إعدادات البيئة!');
     }
 });
