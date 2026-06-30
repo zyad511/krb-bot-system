@@ -1,50 +1,47 @@
 import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import mongoose from 'mongoose';
 import cors from 'cors';
-import { GuildConfig } from '../../bot/src/database/GuildConfig';
-import { CacheManager } from '../../bot/src/database/CacheManager';
+import { GuildConfig } from './database/GuildConfig';
+import { CacheManager } from './database/CacheManager';
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-const cache = CacheManager.getInstance();
-
 app.use(cors());
 app.use(express.json());
 
-// الـ Connection بقاعدة البيانات
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/securitybot');
+const cache = CacheManager.getInstance();
 
-// مسار تعديل إعدادات السيرفر وحفظها تلقائياً بالداتابيز والكاش
-app.post('/api/guilds/:guildId/config', async (req, res) => {
+// نقطة نهاية لجلب إعدادات السيرفر إلى لوحة التحكم
+app.get('/api/config/:guildId', async (req, res) => {
   const { guildId } = req.params;
-  const updatedData = req.body;
-
-  // تحديث قاعدة البيانات
-  const config = await GuildConfig.findOneAndUpdate(
-    { guildId },
-    { $set: updatedData },
-    { new: true, upsert: true }
-  );
-
-  // مسح وتحديث الكاش في الـ Redis فوراً ليطبقه البوت بدون إعادة تشغيل
-  await cache.invalidateGuildConfig(guildId);
-  await cache.setGuildConfig(guildId, config);
-
-  // إرسال تحديث عبر الـ WebSocket إلى لوحة التحكم المفتوحة لدى المديرين
-  io.to(`guild:${guildId}`).emit('configUpdated', config);
-
-  return res.json({ success: true, data: config });
+  try {
+    let config = await cache.getGuildConfig(guildId);
+    if (!config) {
+      config = await GuildConfig.findOne({ guildId });
+      if (config) await cache.setGuildConfig(guildId, config);
+    }
+    return res.json(config || { error: 'Not found' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// إدارة اتصالات الـ WebSockets للمزامنة اللحظية
-io.on('connection', (socket) => {
-  socket.on('joinGuildRoom', (guildId) => {
-    socket.join(`guild:${guildId}`);
-  });
+// نقطة نهاية لتحديث الإعدادات من لوحة التحكم ومسح الكاش القديم فوراً
+app.post('/api/config/:guildId', async (req, res) => {
+  const { guildId } = req.params;
+  try {
+    const updatedConfig = await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { $set: req.body },
+      { upsert: true, new: true }
+    );
+    await cache.invalidateGuildConfig(guildId);
+    await cache.setGuildConfig(guildId, updatedConfig);
+    return res.json({ success: true, config: updatedConfig });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to update configuration' });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Secure Infrastructure API Running on Port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`[KRB API] Dashboard backend running on port ${PORT}`);
+});
