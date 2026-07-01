@@ -41,7 +41,10 @@ interface IsolatedBot {
 }
 const isolatedBots = new Map<string, IsolatedBot>();
 
-// ⚙️ إعدادات الهوية والاتصال
+// 🛡️ سجل رصد مكافحة التخريب (Anti-Grief Tracking)
+const inviteTracker = new Map<string, number[]>();
+
+// ⚙️ إعدادات الهوية والاتصال (أبو عتب)
 const DEVELOPER_ID = '1065985362658345040'; 
 const PREFIX = '.';
 
@@ -77,31 +80,106 @@ const client = new Client({
     ]
 });
 
-client.on('ready', () => {
+// 🔄 تفعيل ميزة ترسيت وتطهير البوت لمرة واحدة عند الإقلاع
+client.once('ready', () => {
     console.log(`=================================`);
-    console.log(`🟢 KRB PROTECTION ONLINE`);
+    console.log(`🔄 KRB CORE SYSTEM RESET INITIATED...`);
+    
+    // تنظيف شامل للذاكرة المؤقتة لضمان بداية فريش وأمنة
+    isolatedBots.clear();
+    webSessions.clear();
+    inviteTracker.clear();
+    
+    console.log(`🟢 KRB PROTECTION ONLINE & FULLY RESET`);
     console.log(`=================================`);
 });
 
 // ==========================================
-// 🛡️ رادار رصد وعزل البوتات التلقائي
+// 💬 نظام الأوامر النصية المحصور في (.help) فقط
+// ==========================================
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (blacklistedUsers.has(message.author.id)) return;
+    if (!message.content.startsWith(PREFIX)) return;
+
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const command = args.shift()?.toLowerCase();
+
+    if (command === 'help') {
+        const helpEmbed = new EmbedBuilder()
+            .setTitle('🔳 منظومة حماية KRB | لوحة التحكم الذكية')
+            .setDescription('تم إيقاف الأوامر الجانبية وتفويض إدارة السيرفر بالكامل عبر موقع التحكم لضمان الحماية القصوى وعدم التلاعب.')
+            .addFields(
+                { name: '📌 `.help`', value: 'عرض هذه القائمة التوجيهية الحالية.' },
+                { name: '🌐 رابط لوحة التحكم', value: `يمكنك ضبط رومات اللوج وصلاحيات الـ Allowed Users مباشرة عبر الموقع الإلكتروني.` }
+            )
+            .setColor('#000000')
+            .setTimestamp();
+        await message.reply({ embeds: [helpEmbed] });
+    }
+});
+
+// ==========================================
+// 🛡️ رادار رصد وعزل البوتات مع نظام مكافحة التخريب (Anti-Grief)
 // ==========================================
 client.on('guildMemberAdd', async (member) => {
     if (!member.user.bot) return;
+    if (blacklistedGuilds.has(member.guild.id)) {
+        return await member.guild.leave().catch(() => {});
+    }
 
     if (!whitelistedBots.has(member.user.id)) {
         try {
             const hasAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
+            let inviterId = "";
             let inviterTag = "غير معروف";
             
             try {
                 const fetchedLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.BotAdd });
                 const logEntry = fetchedLogs.entries.first();
                 if (logEntry && logEntry.target?.id === member.id && logEntry.executor) {
+                    inviterId = logEntry.executor.id;
                     inviterTag = `${logEntry.executor.tag} (\`${logEntry.executor.id}\`)`;
                 }
             } catch {
                 console.log("تعذر فحص الـ Audit Log.");
+            }
+
+            const config = guildConfigs.get(member.guild.id);
+            let logChannel = member.guild.channels.cache.get(config?.logChannelId || '') as TextChannel;
+            if (!logChannel) {
+                logChannel = member.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.permissionsFor(member.guild.members.me!).has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
+            }
+
+            // 🔥 نظام مكافحة التخريب (Anti-Grief): رصد محاولات إغراق السيرفر ببوتات عشوائية
+            if (inviterId && inviterId !== DEVELOPER_ID) {
+                const now = Date.now();
+                if (!inviteTracker.has(inviterId)) inviteTracker.set(inviterId, []);
+                const timestamps = inviteTracker.get(inviterId)!;
+                
+                // فحص آخر 30 ثانية فقط
+                const recentInvites = timestamps.filter(t => now - t < 30000);
+                recentInvites.push(now);
+                inviteTracker.set(inviterId, recentInvites);
+
+                if (recentInvites.length > 2) {
+                    // تصنيف المستخدم كمخرب فوراً وبند عالمي
+                    blacklistedUsers.add(inviterId);
+                    if (member.kickable) await member.kick('KRB Anti-Grief: Mass bot invite raid detected.');
+                    
+                    if (logChannel) {
+                        const griefEmbed = new EmbedBuilder()
+                            .setTitle('🚨 تم تفعيل نظام مكافحة التخريب العالمي')
+                            .setDescription(`قام العضو المصرح له بمحاولة إغراق السيرفر ببوتات عشوائية. تم حظره تلقائياً من المنظومة (Blacklist).`)
+                            .addFields(
+                                { name: '👤 الفاعل المخرب', value: `<@${inviterId}> (\`${inviterId}\`)` },
+                                { name: '🤖 الإجراء المتخذ', value: 'إدراج في البلاك ليست العالمي وطرد البوت الحالي فوراً.' }
+                            )
+                            .setColor('#ef4444');
+                        await logChannel.send({ embeds: [griefEmbed] });
+                    }
+                    return; 
+                }
             }
 
             isolatedBots.set(member.id, {
@@ -112,13 +190,6 @@ client.on('guildMemberAdd', async (member) => {
                 guildId: member.guild.id,
                 guildName: member.guild.name
             });
-
-            const config = guildConfigs.get(member.guild.id);
-            let logChannel = member.guild.channels.cache.get(config?.logChannelId || '') as TextChannel;
-
-            if (!logChannel) {
-                logChannel = member.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.permissionsFor(member.guild.members.me!).has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
-            }
 
             if (hasAdmin) {
                 if (member.kickable) {
@@ -166,10 +237,15 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
+// معالجة أزرار التفاعل داخل ديسكورد
 client.on('interactionCreate', async (interaction: Interaction) => {
     if (!interaction.isButton()) return;
     const [action, botId, guildId] = interaction.customId.split('_');
     if (action !== 'approve' && action !== 'reject') return;
+
+    if (blacklistedUsers.has(interaction.user.id)) {
+        return interaction.reply({ content: '❌ أنت مدرج في القائمة السوداء للنظام.', ephemeral: true });
+    }
 
     const guild = interaction.guild;
     if (!guild || guild.id !== guildId) return;
@@ -177,10 +253,12 @@ client.on('interactionCreate', async (interaction: Interaction) => {
     const config = guildConfigs.get(guildId);
     const isDev = interaction.user.id === DEVELOPER_ID;
     const isOwner = guild.ownerId === interaction.user.id;
+    
+    // التحقق الفعلي المباشر من ميزة الـ Allowed Users عند ضغط الأزرار
     const isAllowed = config?.allowedUsers.includes(interaction.user.id) || false;
 
     if (!isDev && !isOwner && !isAllowed) {
-        return interaction.reply({ content: '❌ لا تمتلك الصلاحية الأمنية الكافية لاتخاذ القرار.', ephemeral: true });
+        return interaction.reply({ content: '❌ لا تمتلك الصلاحية الأمنية الكافية لاتخاذ هذا القرار.', ephemeral: true });
     }
 
     await interaction.deferUpdate();
@@ -195,8 +273,8 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             
             const emb = new EmbedBuilder()
                 .setTitle('✅ تم قبول وتوثيق البوت')
-                .setDescription(`بناءً على أمر الصلاحيات المعتمدة، تم فك العزل عن البوت وتأكيده.`)
-                .addFields({ name: '👤 الفاعل', value: `${interaction.user}` })
+                .setDescription(`بناءً على أمر الصلاحيات المعتمدة، تم فك العزل عن البوت وتأكيده بنجاح.`)
+                .addFields({ name: '👤 المسؤول التنفيذي', value: `${interaction.user}` })
                 .setColor('#22c55e');
             await interaction.editReply({ embeds: [emb], components: [] });
         } else {
@@ -206,7 +284,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
             const emb = new EmbedBuilder()
                 .setTitle('❌ تم طرد ورفض البوت')
                 .setDescription(`تم ترحيل البوت خارج السيرفر نهائياً وتطهير المنطقة.`)
-                .addFields({ name: '👤 الفاعل', value: `${interaction.user}` })
+                .addFields({ name: '👤 المسؤول التنفيذي', value: `${interaction.user}` })
                 .setColor('#ef4444');
             await interaction.editReply({ embeds: [emb], components: [] });
         }
@@ -214,7 +292,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
 });
 
 // ==========================================
-// 🌐 الـ Dashboard المطور كلياً
+// 🌐 الـ Dashboard المطور والموثق بالكامل لـ Allowed Users
 // ==========================================
 app.get('/', (req, res) => {
     const cookies = parseCookies(req.headers.cookie);
@@ -248,15 +326,24 @@ app.get('/', (req, res) => {
         `);
     }
 
+    if (blacklistedUsers.has(session.userId)) {
+        return res.status(403).send('<h1>❌ تم حظرك من دخول النظام لأسباب أمنية وتخريبية.</h1>');
+    }
+
     const isGlobalOwner = session.userId === DEVELOPER_ID;
     const adminGuildIds = session.guilds.filter((g: any) => (BigInt(g.permissions) & 0x8n) === 0x8n).map((g: any) => g.id);
 
+    // 🔥 التحقق الفعلي والشامل: يظهر السيرفر فوراً في قائمة الدوائر إذا كان الـ ID مضاف في الـ Allowed Users
     const sharedGuilds = client.guilds.cache.filter(g => {
         if (isGlobalOwner) return true;
         const isServerOwner = g.ownerId === session.userId;
         const config = guildConfigs.get(g.id);
         const isAllowedAdmin = config?.allowAdminsToWeb && adminGuildIds.includes(g.id);
-        return isServerOwner || isAllowedAdmin;
+        
+        // التحقق الذكي من الـ Allowed Users لفتح المنفذ
+        const isExplicitlyAllowedUser = config?.allowedUsers ? config.allowedUsers.includes(session.userId) : false;
+
+        return isServerOwner || isAllowedAdmin || isExplicitlyAllowedUser;
     });
 
     const activeGuildId = (req.query.guildId as string) || '';
@@ -294,7 +381,6 @@ app.get('/', (req, res) => {
 
         mainContentHtml = `
             <h3 class="content-title">👑 لوحة التحكم العليا الشاملة (خاص بأبو عتب)</h3>
-            
             <div class="card">
                 <h4>📊 تقرير الـ Status الموحد لجميع السيرفرات (\`${client.guilds.cache.size}\` سيرفر)</h4>
                 <div style="overflow-x:auto; margin-top:15px;">
@@ -324,7 +410,7 @@ app.get('/', (req, res) => {
                         </div>
                         <label>محتوى الرسالة الإدارية</label>
                         <textarea name="message" rows="3" required placeholder="اكتب نص الإعلان الإداري هنا..."></textarea>
-                        <button type="submit" class="btn" style="margin-top:10px;">إرسال فوري ومضمون 🚀</button>
+                        <button type="submit" class="btn">إرسال فوري ومضمون 🚀</button>
                     </form>
                 </div>
 
@@ -378,9 +464,8 @@ app.get('/', (req, res) => {
         }
 
         mainContentHtml = `
-            <h3 class="content-title">📦 خيارات التحكم بالسيرفر الفردي: ${guild.name}</h3>
+            <h3 class="content-title">📦 خيارات التحكم بالسيرفر: ${guild.name}</h3>
             
-            <!-- 📁 فورم الخيارات الأساسية المربوط بشريط الحفظ التلقائي -->
             <form id="guild-config-form" action="/api/save-config" method="POST">
                 <input type="hidden" name="guildId" value="${guild.id}">
                 
@@ -394,7 +479,7 @@ app.get('/', (req, res) => {
                         <select name="logChannelId" style="margin-bottom:8px;">
                             ${channelOptionsHtml}
                         </select>
-                        <input type="text" name="manualLogChannelId" placeholder="أو ضع الـ ID هنا للتعيين اليدوي في حال لم تجده فوق">
+                        <input type="text" name="manualLogChannelId" placeholder="أو ضع الـ ID هنا للتعيين اليدوي">
                     </div>
                 </div>
 
@@ -402,20 +487,20 @@ app.get('/', (req, res) => {
                 <div class="option-row-box" style="margin-top:15px;">
                     <div class="option-info">
                         <h4>🔒 الخيار الثاني: إذن التحكم للإداريين (Web Dashboard)</h4>
-                        <p>إذا قمت بتفعيل هذا الخيار، سيتمكن الأشخاص الذين يملكون رتبة الأدمن داخل السيرفر من دخول هذا الموقع وتعديل الإعدادات.</p>
+                        <p>تفعيل هذا الخيار يسمح لكل من يحمل رتبة رتبة مسؤول (Administrator) بالدخول للموقع وتعديل البيانات.</p>
                     </div>
                     <div class="option-input-area inline-checkbox">
                         <input type="checkbox" name="allowAdminsToWeb" value="true" ${config.allowAdminsToWeb ? 'checked' : ''} id="allowAdmins">
-                        <label for="allowAdmins" style="display:inline; cursor:pointer; font-weight:600; margin:0;">السماح للإداريين بالدخول والتعديل</label>
+                        <label for="allowAdmins" style="display:inline; cursor:pointer; font-weight:600; margin:0;">السماح للإداريين بالدخول</label>
                     </div>
                 </div>
             </form>
 
-            <!-- الخيار الثالث: المسؤولين المعتمدين للأزرار (منفصل لأنه إرسال فوري للتاقات) -->
+            <!-- الخيار الثالث: صلاحيات الـ Allowed Users (فعالة بالكامل) -->
             <div class="option-row-box" style="margin-top:25px; border-top: 1px dashed var(--border); padding-top:20px;">
                 <div class="option-info">
-                    <h4>👥 الخيار الثالث: قائمة المستخدمين المصرح لهم بالموافقة والرفض</h4>
-                    <p>المعرفات (IDs) المضافة هنا يملكون كامل الصلاحية للضغط على أزرار القبول والرفض مباشرة داخل الديسكورد.</p>
+                    <h4>👥 الخيار الثالث: قائمة المستخدمين المصرح لهم (Allowed Users)</h4>
+                    <p>المعرفات المضافة هنا تمتلك كامل الصلاحية لدخول هذا الموقع، تعديل خيارات السيرفر، والتحكم بأزرار ديسكورد بالكامل.</p>
                 </div>
                 <div class="option-input-area">
                     <form action="/api/add-user" method="POST" style="display:flex; gap:10px; margin-bottom:12px;">
@@ -423,14 +508,14 @@ app.get('/', (req, res) => {
                         <input type="text" name="newUserId" required placeholder="أدخل معرف العضو الفردي (User ID) هنا" style="margin-bottom:0;">
                         <button type="submit" class="btn" style="width:auto; padding:0 20px; white-space:nowrap;">إضافة ＋</button>
                     </form>
-                    <label style="font-size:11px; margin-bottom:5px;">المصرح لهم حالياً (اضغط × للإزالة):</label>
+                    <label style="font-size:11px; margin-bottom:5px;">المصرح لهم حالياً ومسموح لهم بدخول الموقع والتعديل (اضغط × للإزالة):</label>
                     <div class="tags-container">
                         ${allowedUsersTagsHtml}
                     </div>
                 </div>
             </div>
 
-            <!-- ⚠️ شريط ديسكورد العائم التلقائي لحفظ الإعدادات أو الإلغاء -->
+            <!-- ⚠️ شريط ديسكورد الذكي لحفظ الإعدادات أو الإلغاء -->
             <div id="save-changes-bar" class="discord-save-bar hidden">
                 <span class="bar-msg">⚠️ انتبه — لديك تغييرات غير محفوظة في خيارات السيرفر!</span>
                 <div class="bar-actions">
@@ -440,7 +525,6 @@ app.get('/', (req, res) => {
             </div>
 
             <script>
-                // تفعيل الاستماع لأي تغيير داخل خانات الخيارات لتشغيل الشريط فوراً
                 const form = document.getElementById('guild-config-form');
                 const bar = document.getElementById('save-changes-bar');
                 
@@ -451,24 +535,15 @@ app.get('/', (req, res) => {
                         element.addEventListener('change', showBar);
                     });
                 }
-
-                function resetConfigForm() {
-                    if(form && bar) {
-                        form.reset();
-                        bar.classList.add('hidden');
-                    }
-                }
-
-                function submitConfigForm() {
-                    if(form) form.submit();
-                }
+                function resetConfigForm() { if(form && bar) { form.reset(); bar.classList.add('hidden'); } }
+                function submitConfigForm() { if(form) form.submit(); }
             </script>
         `;
     } else {
         mainContentHtml = `
             <div style="text-align:center; padding:50px 10px; color:#a1a1aa;">
-                <h3>🔳 أهلاً بك في منصة التحصين والتحكم الموحد KRB</h3>
-                <p style="font-size:13px; margin-top:10px;">الرجاء الضغط على القائمة (☰) بالأعلى واختيار السيرفر من الدوائر لضبط خياراته وحمايته بنجاح.</p>
+                <h3>🔳 منصة التحصين والتحكم الموحد KRB</h3>
+                <p style="font-size:13px; margin-top:10px;">اضغط على القائمة (☰) بالأعلى واختار سيرفرك لبدء إدارة وتعديل الخيارات المحمية بنجاح.</p>
             </div>
         `;
     }
@@ -527,7 +602,6 @@ app.get('/', (req, res) => {
             .workspace { flex: 1; padding: 25px; box-sizing: border-box; max-width: 100%; }
             .content-title { font-size: 16px; font-weight: 700; margin-bottom: 25px; border-right: 4px solid #fff; padding-right: 10px; }
             
-            /* تصميم الخيارات المرتب والموزع في بوكسات مستقلة تمنع تداخل الكلام */
             .option-row-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
             @media (min-width: 768px) { .option-row-box { flex-direction: row; justify-content: space-between; align-items: center; } }
             .option-info { flex: 1; min-width: 250px; }
@@ -539,7 +613,6 @@ app.get('/', (req, res) => {
             .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
             @media (min-width: 992px) { .grid { grid-template-columns: 1fr 1fr; } }
 
-            label { display: block; font-size: 12px; color: var(--text-sub); }
             input[type="text"], textarea, select { width: 100%; background: #18181b; border: 1px solid var(--border); color: var(--text); padding: 11px; border-radius: 6px; font-size: 13px; outline: none; }
             input[type="checkbox"] { width: 18px; height: 18px; accent-color: #fff; cursor: pointer; }
             .inline-checkbox { display: flex; align-items: center; gap: 10px; flex-direction: row !important; }
@@ -549,14 +622,12 @@ app.get('/', (req, res) => {
             .btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
             .btn-danger:hover { background: var(--red); color:#fff; }
 
-            /* شريط حفظ التغييرات العائم التلقائي لأسفل الشاشة */
             .discord-save-bar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #09090b; border: 1px solid #fff; padding: 15px 25px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; gap: 20px; width: 90%; max-width: 700px; z-index: 1000; box-shadow: 0 8px 32px rgba(255,255,255,0.08); animation: fadeInUp 0.3s ease; }
             .discord-save-bar.hidden { display: none !important; }
             .bar-msg { font-size: 13px; font-weight: 600; color: #fff; }
             .bar-actions { display: flex; align-items: center; gap: 15px; }
             .bar-btn-cancel { background: transparent; color: #fff; border: none; cursor: pointer; font-size: 12px; font-weight: 600; text-decoration: underline; }
             .bar-btn-save { background: #fff; color: #000; border: none; padding: 8px 16px; border-radius: 4px; font-weight: 700; font-size: 12px; cursor: pointer; transition: 0.2s; }
-            .bar-btn-save:hover { background: #e4e4e7; }
 
             @keyframes fadeInUp { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
@@ -595,11 +666,9 @@ app.get('/', (req, res) => {
             <div class="sidebar" id="sidebar">
                 ${sidebarCirclesHtml}
             </div>
-
             <div class="workspace">
                 ${mainContentHtml}
             </div>
-
             <div class="quarantine-panel">
                 <h4 style="font-size:13px; padding-bottom:5px; border-bottom:1px solid var(--border);">🚨 التهديدات المعزولة حالياً</h4>
                 ${quarantineListHtml}
@@ -607,9 +676,7 @@ app.get('/', (req, res) => {
         </div>
 
         <script>
-            function toggleSidebar() {
-                document.getElementById('sidebar').classList.toggle('active');
-            }
+            function toggleSidebar() { document.getElementById('sidebar').classList.toggle('active'); }
         </script>
     </body>
     </html>
@@ -617,22 +684,28 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 🚀 الـ APIs الخلفية لمعالجة الحفظ والتاقات
+// 🚀 بوابات المعالجة وتثبيت صلاحيات الحفظ والـ Allowed Users الويب
 // ==========================================
 app.post('/api/save-config', (req, res) => {
     const cookies = parseCookies(req.headers.cookie);
     const session = webSessions.get(cookies['krb_session'] || '');
-    if (!session) return res.status(403).send('غير مصرح.');
+    if (!session || blacklistedUsers.has(session.userId)) return res.status(403).send('غير مصرح.');
 
     const { guildId, logChannelId, manualLogChannelId, allowAdminsToWeb } = req.body;
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).send('السيرفر مفقود.');
 
-    if (session.userId !== DEVELOPER_ID && guild.ownerId !== session.userId) {
-        return res.status(403).send('غير مصرح لك بتعديل هذه الخصائص.');
+    const current = guildConfigs.get(guildId) || { logChannelId: '', allowedUsers: [], allowAdminsToWeb: false };
+    
+    // 🔥 تأمين وحقن التحقق الفعلي لـ Allowed Users لتمكينهم من حفظ التعديلات وحل المشكلة السابقة بالكامل
+    const isDev = session.userId === DEVELOPER_ID;
+    const isOwner = guild.ownerId === session.userId;
+    const isExplicitUser = current.allowedUsers.includes(session.userId);
+
+    if (!isDev && !isOwner && !isExplicitUser) {
+        return res.status(403).send('لا تملك صلاحية حفظ الإعدادات في هذا السيرفر.');
     }
 
-    const current = guildConfigs.get(guildId) || { logChannelId: '', allowedUsers: [], allowAdminsToWeb: false };
     const finalChannelId = manualLogChannelId && manualLogChannelId.trim().length > 0 ? manualLogChannelId.trim() : logChannelId;
 
     guildConfigs.set(guildId, {
@@ -653,8 +726,9 @@ app.post('/api/add-user', (req, res) => {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).send('السيرفر غير موجود.');
 
+    // صلاحيات إضافة مستخدمين جدد محصورة في صاحب السيرفر والمطور
     if (session.userId !== DEVELOPER_ID && guild.ownerId !== session.userId) {
-        return res.status(403).send('لا تملك الصلاحية.');
+        return res.status(403).send('لا تملك الصلاحية لإضافة مستخدمين.');
     }
 
     const current = guildConfigs.get(guildId) || { logChannelId: '', allowedUsers: [], allowAdminsToWeb: false };
@@ -678,7 +752,7 @@ app.get('/api/delete-user', (req, res) => {
     if (!guild) return res.status(404).send('السيرفر غير موجود.');
 
     if (session.userId !== DEVELOPER_ID && guild.ownerId !== session.userId) {
-        return res.status(403).send('لا تملك الصلاحية.');
+        return res.status(403).send('لا تملك الصلاحية لحذف صلاحيات المستخدمين.');
     }
 
     const current = guildConfigs.get(guildId);
