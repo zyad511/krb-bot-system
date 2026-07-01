@@ -102,7 +102,7 @@ const REDIRECT_URI = process.env.REDIRECT_URI || 'https://krb-security-system.on
 const parseCookies = (rc: string | undefined) => {
     const list: { [key: string]: string } = {};
     if (!rc) return list;
-    rc.split(';').forEach((cookie) => {
+    rc.split(';').forEach((cookie: string) => {
         const parts = cookie.split('=');
         list[parts.shift()!.trim()] = decodeURI(parts.join('='));
     });
@@ -419,7 +419,7 @@ app.get('/', (req, res) => {
     const isGlobalOwner = session.userId === DEVELOPER_ID;
     const adminGuildIds = session.guilds.filter((g: any) => (BigInt(g.permissions) & 0x8n) === 0x8n).map((g: any) => g.id);
 
-    const sharedGuilds = client.guilds.cache.filter(g => {
+    const sharedGuilds = client.guilds.cache.filter((g: any) => {
         if (isGlobalOwner) return true;
         const isServerOwner = g.ownerId === session.userId;
         const config = db.guildConfigs[g.id];
@@ -436,7 +436,7 @@ app.get('/', (req, res) => {
     if (isGlobalOwner) {
         sidebarCirclesHtml += `<a href="/?view=global" class="circle-item ${currentView === 'global' ? 'active-circle' : ''}" title="الإدارة العليا">👑</a>`;
     }
-    sharedGuilds.forEach((g) => {
+    sharedGuilds.forEach((g: any) => {
         const iconUrl = g.iconURL({ extension: 'png' }) || 'https://cdn.discordapp.com/embed/avatars/0.png';
         sidebarCirclesHtml += `
             <a href="/?guildId=${g.id}" class="circle-item ${activeGuildId === g.id ? 'active-circle' : ''}" title="${g.name}">
@@ -449,7 +449,7 @@ app.get('/', (req, res) => {
 
     if (currentView === 'global' && isGlobalOwner) {
         let globalStatusRows = '';
-        client.guilds.cache.forEach((g) => {
+        client.guilds.cache.forEach((g: any) => {
             const conf = db.guildConfigs[g.id];
             globalStatusRows += `
                 <tr>
@@ -541,13 +541,13 @@ app.get('/', (req, res) => {
         }
 
         let channelOptionsHtml = `<option value="">-- اختر قناة اللوج --</option>`;
-        guild.channels.cache.filter(c => c.type === ChannelType.GuildText).forEach((ch) => {
+        guild.channels.cache.filter((c: any) => c.type === ChannelType.GuildText).forEach((ch: any) => {
             channelOptionsHtml += `<option value="${ch.id}" ${config.logChannelId === ch.id ? 'selected' : ''}># ${ch.name}</option>`;
         });
 
         let allowedUsersTagsHtml = '';
         if (config.allowedUsers && config.allowedUsers.length > 0) {
-            config.allowedUsers.forEach((uId) => {
+            config.allowedUsers.forEach((uId: string) => {
                 allowedUsersTagsHtml += `
                     <span class="user-tag">
                         \`${uId}\`
@@ -563,7 +563,7 @@ app.get('/', (req, res) => {
         if (hasFullAccess) {
             let rows = '';
             if (config.serverBlacklistedUsers && config.serverBlacklistedUsers.length > 0) {
-                config.serverBlacklistedUsers.forEach((bId) => {
+                config.serverBlacklistedUsers.forEach((bId: string) => {
                     rows += `
                         <tr>
                             <td><span class="badge-code">${bId}</span></td>
@@ -677,7 +677,7 @@ app.get('/', (req, res) => {
     }
 
     let quarantineListHtml = '';
-    isolatedBots.forEach((bot) => {
+    isolatedBots.forEach((bot: any) => {
         if (isGlobalOwner || sharedGuilds.has(bot.guildId)) {
             quarantineListHtml += `
                 <div class="q-card">
@@ -852,7 +852,7 @@ app.get('/api/unblacklist-user', async (req, res) => {
 
     const current = db.guildConfigs[guildId];
     if (current && current.serverBlacklistedUsers) {
-        current.serverBlacklistedUsers = current.serverBlacklistedUsers.filter(id => id !== userId);
+        current.serverBlacklistedUsers = current.serverBlacklistedUsers.filter((id: string) => id !== userId);
         db.guildConfigs[guildId] = current;
         await saveDB();
     }
@@ -902,7 +902,7 @@ app.get('/api/delete-user', async (req, res) => {
 
     const current = db.guildConfigs[guildId];
     if (current) {
-        current.allowedUsers = current.allowedUsers.filter(id => id !== userId);
+        current.allowedUsers = current.allowedUsers.filter((id: string) => id !== userId);
         db.guildConfigs[guildId] = current;
         await saveDB();
     }
@@ -920,8 +920,8 @@ app.post('/api/blacklist', async (req, res) => {
         if (type === 'user' && !db.blacklistedUsers.includes(targetId.trim())) db.blacklistedUsers.push(targetId.trim());
         if (type === 'guild' && !db.blacklistedGuilds.includes(targetId.trim())) db.blacklistedGuilds.push(targetId.trim());
     } else {
-        if (type === 'user') db.blacklistedUsers = db.blacklistedUsers.filter(id => id !== targetId.trim());
-        if (type === 'guild') db.blacklistedGuilds = db.blacklistedGuilds.filter(id => id !== targetId.trim());
+        if (type === 'user') db.blacklistedUsers = db.blacklistedUsers.filter((id: string) => id !== targetId.trim());
+        if (type === 'guild') db.blacklistedGuilds = db.blacklistedGuilds.filter((id: string) => id !== targetId.trim());
     }
     await saveDB();
     res.send(`<script>alert("🔒 جدار الحظر الشامل الموحد تم ترحيله للمونجو!"); window.location.href="/?view=global";</script>`);
@@ -938,7 +938,7 @@ app.post('/api/send-custom', async (req, res) => {
         let sc = 0;
         for (const g of client.guilds.cache.values()) {
             try {
-                const ch = g.channels.cache.find(c => c.isTextBased() && c.permissionsFor(g.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
+                const ch = g.channels.cache.find((c: any) => c.isTextBased() && c.permissionsFor(g.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
                 if (ch) { await ch.send(message); sc++; }
             } catch {}
         }
@@ -947,7 +947,7 @@ app.post('/api/send-custom', async (req, res) => {
 
     try {
         const g = await client.guilds.fetch(guildId);
-        const ch = g.channels.cache.find(c => c.isTextBased() && c.permissionsFor(g.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
+        const ch = g.channels.cache.find((c: any) => c.isTextBased() && c.permissionsFor(g.members.me!)?.has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
         if (ch) await ch.send(message);
         res.send(`<script>alert("🚀 تم إرسال رسالة البث المستهدف!"); window.location.href="/?view=global";</script>`);
     } catch (e: any) { res.status(500).send(e.message); }
