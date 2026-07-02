@@ -18,8 +18,7 @@ import mongoose from 'mongoose';
 import http from 'http';
 import querystring from 'querystring';
 
-// 🌟 تم إضافة export هنا ليقرأها ملف الأحداث
-export const client = new Client({
+const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -32,15 +31,14 @@ export const client = new Client({
 // ==========================================
 // 🛡️ الإعدادات الأمنية العليا لـ KRB
 // ==========================================
-// 🌟 تم إضافة export هنا أيضاً
-export const SUPREME_OWNER_ID = '1065985362658345040'; 
+const SUPREME_OWNER_ID = '1065985362658345040'; // هويتك الشخصية المحمية
 const PREFIX = '.';
 
-// 🌟 تم إضافة export هنا لتعديل الـ Whitelist من الأزرار مباشرة
-export const whitelistedBots = new Set<string>(); 
+const whitelistedBots = new Set<string>(); 
 const nukeTracker = new Map<string, { count: number; lastAction: number }>();
+const spamTracker = new Map<string, { count: number; lastMessage: number }>(); // تعقب السبام
 
-// 🔗 الاتصال الاختياري بالمونقو
+// الاتصال الاختياري بالمونقو
 const MONGO_URI = process.env.MONGO_URI || '';
 if (MONGO_URI) {
   mongoose.connect(MONGO_URI).catch(() => console.log('[KRB] Running in Secure Memory Mode.'));
@@ -60,7 +58,6 @@ http.createServer(async (req, res) => {
     req.on('end', async () => {
       const postData = querystring.parse(body);
 
-      // أ) أمر البث الإعلاني
       if (url === '/api/broadcast') {
         const messageContent = postData.message as string;
         if (messageContent) {
@@ -78,7 +75,6 @@ http.createServer(async (req, res) => {
         }
       }
 
-      // ب) أمر مغادرة السيرفرات
       if (url === '/api/leave') {
         const guildId = postData.guildId as string;
         if (guildId) {
@@ -87,17 +83,14 @@ http.createServer(async (req, res) => {
         }
       }
 
-      // ج) قبول البوت وإلغاء العزل (Timeout) عنه تلقائياً في السيرفر
       if (url === '/api/whitelist') {
         const botId = postData.botId as string;
         if (botId) {
           whitelistedBots.add(botId);
-          
           client.guilds.cache.forEach(async (guild) => {
             const isolatedBot = await guild.members.fetch(botId).catch(() => null);
             if (isolatedBot && isolatedBot.communicationDisabledUntilTimestamp) {
               await isolatedBot.timeout(null, 'KRB Web: Approved and activated by owner.').catch(() => {});
-              
               const sysChannel = guild.channels.cache.find(c => c.type === ChannelType.GuildText) as TextChannel;
               if (sysChannel) {
                 sysChannel.send(`✅ **[KRB SECURITY]:** تم تفعيل البوت <@${botId}> بنجاح من لوحة التحكم وإلغاء العزل عنه.`);
@@ -115,7 +108,6 @@ http.createServer(async (req, res) => {
 
   if (url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-
     let guildsHtml = '';
     client.guilds.cache.forEach(guild => {
       guildsHtml += `
@@ -161,7 +153,6 @@ http.createServer(async (req, res) => {
         <div class="container">
           <h1>🔳 KRB SYSTEM | CONTROL INTERFACE</h1>
           <p>مرحباً بك يا أبو عتب. حالة النظام الأمني: <span class="status">نشط وجدار العزل مستقر ●</span></p>
-
           <div class="grid">
             <div class="card">
               <h2>📢 إرسال بث موحد لجميع السيرفرات</h2>
@@ -170,43 +161,20 @@ http.createServer(async (req, res) => {
                 <button type="submit">إطلاق البث الآن 🚀</button>
               </form>
             </div>
-
             <div class="card">
               <h2>🛡️ الموافقة وتفعيل بوت معزول</h2>
               <form action="/api/whitelist" method="POST">
                 <input type="text" name="botId" placeholder="ضع الرقم التعريفي (ID) للبوت المعزول...">
                 <button type="submit">فك العزل والتوثيق فوراً ✅</button>
               </form>
-              <p style="font-size:12px; color:#666; margin-top:10px;">* بمجرد وضع الـ ID هنا، سيقوم البوت بإلغاء الميوت والعزل عن البوت المستهدف داخل السيرفر تلقائياً.</p>
             </div>
-          </div>
-
-          <div style="margin-top: 40px;">
-            <h2>📦 قائمة السيرفرات المتصلة بالشبكة (${client.guilds.cache.size})</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>اسم السيرفر</th>
-                  <th>ID السيرفر</th>
-                  <th>عدد الأعضاء</th>
-                  <th>الإجراءات المتاحة</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${guildsHtml || '<tr><td colspan="4" style="text-align:center; color:#555;">لا توجد سيرفرات متصلة حالياً.</td></tr>'}
-              </tbody>
-            </table>
           </div>
         </div>
       </body>
       </html>
     `);
-    return;
   }
-
-  res.writeHead(404);
-  res.end();
-}).listen(PORT, () => console.log(`[KRB INTERFACE] Dynamic Dashboard Running Perfect.`));
+}).listen(PORT, () => console.log(`[KRB INTERFACE] Dynamic Dashboard Ready.`));
 
 // ==========================================
 // ⚡ خوارزمية العزل التام للبوتات غير المصرحة
@@ -216,28 +184,32 @@ client.on('guildMemberAdd', async (member) => {
 
   if (!whitelistedBots.has(member.user.id)) {
     try {
-      if (member.manageable) {
-        await member.roles.set([]).catch(() => {});
-      }
-
+      if (member.manageable) await member.roles.set([]).catch(() => {});
       await member.timeout(2419200000, 'KRB Security: Unapproved bot isolated completely.').catch(() => {});
 
       const systemChannel = member.guild.channels.cache.find(c => c.type === ChannelType.GuildText) as TextChannel;
       if (systemChannel) {
         const alert = new EmbedBuilder()
           .setTitle('🚨 **[KRB SECURITY] تم رصد وعزل بوت غير مصرح**')
-          .setDescription(`دخل البوت \`${member.user.tag}\` إلى السيرفر.\n\n🛡️ **الإجراء المتخذ تلقائياً:**\n- تم سحب كافة صلاحياته ورتبه بالكامل.\n- تم إدخاله في عزل تام وميوت شامل (Timeout).\n\n*البوت الآن مشلول تماماً ولن يعمل حتى توافق عليه من موقع الويب.*`)
+          .setDescription(`دخل البوت \`${member.user.tag}\` إلى السيرفر.\n\n🛡️ **الإجراء المتخذ تلقائياً:**\n- تم سحب كافة صلاحياته ورتبه بالكامل.\n- تم إدخاله في عزل تام وميوت شامل (Timeout).\n\n*يمكنك التحكم بالبوت عبر الأزرار أدناه مباشرة:*`)
           .setColor('#000000');
-        systemChannel.send({ embeds: [alert] }).catch(() => {});
+
+        // أزرار التحكم السريعة والآمنة ظهرت هنا تلقائياً لتوثيق أو طرد البوت
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId(`approve_${member.user.id}_${member.guild.id}`).setLabel('قبول وتفعيل ✅').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`reject_${member.user.id}_${member.guild.id}`).setLabel('طرد وتطهير ❌').setStyle(ButtonStyle.Danger)
+        );
+
+        systemChannel.send({ embeds: [alert], components: [row] }).catch(() => {});
       }
     } catch (err) {
-      console.error('[KRB ISO ERROR] Failed to fully isolate bot:', err);
+      console.error('[KRB ISO ERROR] Failed to isolate bot:', err);
     }
   }
 });
 
 // ==========================================
-// 🔥 مكافحة التخريب السريع (Anti-Nuke Systems)
+// 🔥 مكافحة التخريب السريع للرومات والرولات (Anti-Nuke)
 // ==========================================
 async function handleNukeDetection(guildId: string, executorId: string, actionType: string) {
   if (executorId === client.user?.id || executorId === SUPREME_OWNER_ID) return;
@@ -251,7 +223,7 @@ async function handleNukeDetection(guildId: string, executorId: string, actionTy
       const guild = client.guilds.cache.get(guildId);
       if (!guild) return;
 
-      await guild.members.ban(executorId, { reason: `KRB Anti-Nuke: Rapid channel ${actionType} detected.` }).catch(() => {});
+      await guild.members.ban(executorId, { reason: `KRB Anti-Nuke: Rapid ${actionType} detected.` }).catch(() => {});
       trackingData.count = 0;
     }
   } else {
@@ -261,33 +233,69 @@ async function handleNukeDetection(guildId: string, executorId: string, actionTy
   nukeTracker.set(executorId, trackingData);
 }
 
+// حماية الرومات (حذف / إنشاء)
 client.on('channelDelete', async (channel) => {
   if (!('guild' in channel) || !channel.guild) return;
-  const targetGuild = channel.guild;
   try {
-    const auditLogs = await targetGuild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.ChannelDelete }).catch(() => null);
+    const auditLogs = await channel.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.ChannelDelete }).catch(() => null);
     const entry = auditLogs?.entries.first();
-    if (entry?.executor) await handleNukeDetection(targetGuild.id, entry.executor.id, 'deletion');
+    if (entry?.executor) await handleNukeDetection(channel.guild.id, entry.executor.id, 'channel deletion');
   } catch {}
 });
 
 client.on('channelCreate', async (channel) => {
   if (!('guild' in channel) || !channel.guild) return;
-  const targetGuild = channel.guild;
   try {
-    const auditLogs = await targetGuild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.ChannelCreate }).catch(() => null);
+    const auditLogs = await channel.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.ChannelCreate }).catch(() => null);
     const entry = auditLogs?.entries.first();
-    if (entry?.executor) await handleNukeDetection(targetGuild.id, entry.executor.id, 'creation');
+    if (entry?.executor) await handleNukeDetection(channel.guild.id, entry.executor.id, 'channel creation');
+  } catch {}
+});
+
+// حماية الرولات (حذف / إنشاء) - شغالة الآن 100%
+client.on('roleDelete', async (role) => {
+  try {
+    const auditLogs = await role.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.RoleDelete }).catch(() => null);
+    const entry = auditLogs?.entries.first();
+    if (entry?.executor) await handleNukeDetection(role.guild.id, entry.executor.id, 'role deletion');
+  } catch {}
+});
+
+client.on('roleCreate', async (role) => {
+  try {
+    const auditLogs = await role.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.RoleCreate }).catch(() => null);
+    const entry = auditLogs?.entries.first();
+    if (entry?.executor) await handleNukeDetection(role.guild.id, entry.executor.id, 'role creation');
   } catch {}
 });
 
 // ==========================================
-// 🛠️ لوحة التكت الهجينة الأساسية (.ticket-setup)
+// 💬 نظام الرسائل (الـ Anti-Spam + إعداد التكت)
 // ==========================================
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
-  if (!message.content.startsWith(PREFIX)) return;
 
+  // 1️⃣ خوارزمية الـ Anti-Spam (تشتغل تلقائياً لحماية الشات)
+  const now = Date.now();
+  const userData = spamTracker.get(message.author.id) || { count: 0, lastMessage: now };
+  
+  if (now - userData.lastMessage < 3000) { // إذا أرسل أكثر من 5 رسائل بـ 3 ثواني
+    userData.count++;
+    if (userData.count > 5) {
+      if (message.member?.manageable) {
+        await message.member.timeout(60000, 'KRB Anti-Spam: Sending messages too fast.').catch(() => {});
+        await message.channel.send(`⚠️ **[KRB ANTI-SPAM]:** تم إعطاؤك عزل دقيقة ${message.author} بسبب تكرار الرسائل السريع.`).catch(() => {});
+      }
+      userData.count = 0;
+    }
+  } else {
+    userData.count = 1;
+    userData.lastMessage = now;
+  }
+  spamTracker.set(message.author.id, userData);
+
+  // 2️⃣ أمر لوحة التكت الأساسية (.ticket-setup)
+  if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift()?.toLowerCase();
   const serverIconUrl = message.guild.iconURL({ extension: 'png', size: 1024 }) || 'https://cdn.discordapp.com/embed/avatars/0.png';
@@ -330,19 +338,70 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+// ==========================================
+// 🔘 معالجة التفاعلات (أزرار التكت وأزرار قبول/طرد البوتات)
+// ==========================================
 client.on('interactionCreate', async (interaction: Interaction) => {
   if (!interaction.guild || !interaction.isRepliable()) return;
 
+  // أ) إغلاق التكت
   if (interaction.isButton() && interaction.customId === 'close_hybrid_ticket') {
     const channel = interaction.channel as TextChannel;
     await interaction.reply({ content: '🔳 **[KRB SYSTEM]:** جاري تدمير القناة نهائياً...' }).catch(() => {});
     setTimeout(() => channel.delete().catch(() => {}), 1500);
+    return;
+  }
+
+  // ب) أزرار نظام الحماية (Approve / Reject) للبوتات
+  if (interaction.isButton()) {
+    const [action, botId, guildId] = interaction.customId.split('_');
+    if (action !== 'approve' && action !== 'reject') return;
+
+    const guild = interaction.guild;
+    if (guild.id !== guildId) return;
+
+    const isOwner = guild.ownerId === interaction.user.id;
+    const isSupreme = interaction.user.id === SUPREME_OWNER_ID;
+
+    if (!isSupreme && !isOwner) {
+      return interaction.reply({ content: '❌ هذا الزر مخصص للإدارة العليا أو مالك السيرفر فقط.', ephemeral: true });
+    }
+
+    await interaction.deferUpdate();
+
+    try {
+      const targetBotMember = await guild.members.fetch(botId).catch(() => null);
+
+      if (action === 'approve') {
+        if (!targetBotMember) return;
+        whitelistedBots.add(botId);
+        await targetBotMember.timeout(null, 'KRB Security: Approved via security button.').catch(() => {});
+        
+        const emb = new EmbedBuilder()
+            .setTitle('✅ تم قبول وتوثيق البوت بنجاح')
+            .setDescription(`تم فك العزل التام عن البوت <@${botId}> وتأكيده داخل السيرفر بطلبك.`)
+            .addFields({ name: '👤 المسؤول التنفيذي', value: `${interaction.user}` })
+            .setColor('#000000');
+            
+        await interaction.editReply({ embeds: [emb], components: [] });
+      } else {
+        if (targetBotMember && targetBotMember.kickable) {
+            await targetBotMember.kick('KRB Security: Rejected via security buttons.').catch(() => {});
+        }
+        
+        const emb = new EmbedBuilder()
+            .setTitle('❌ تم طرد ورفض البوت بنجاح')
+            .setDescription(`تم ترحيل البوت المستهدف خارج حدود السيرفر بسلام وتأمين الشبكة.`)
+            .addFields({ name: '👤 المسؤول التنفيذي', value: `${interaction.user}` })
+            .setColor('#000000');
+            
+        await interaction.editReply({ embeds: [emb], components: [] });
+      }
+    } catch (err) { 
+      console.error('[KRB BUTTON ERROR]', err); 
+    }
   }
 });
 
 process.on('unhandledRejection', () => {});
-
-// 🌟 تشغيل وربط ملف الأحداث الخارجي بشكل محلي سليم ومضمون
-import './events/interactionCreate';
-
 client.login(process.env.DISCORD_TOKEN);
