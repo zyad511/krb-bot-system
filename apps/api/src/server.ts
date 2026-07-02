@@ -11,7 +11,6 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    Interaction,
     UserFlagsBitField
 } from 'discord.js';
 
@@ -36,8 +35,11 @@ const KRBSecuritySchema = new mongoose.Schema({
 
 const SecurityModel = mongoose.model('KRBSecurity', KRBSecuritySchema);
 
-// الوعاء المحلي المتزامن مع السحاب لسرعة المعالجة
-let db = {
+// 👑 تصدير المتغيرات ليتعرف عليها ملف الأحداث الخارجي
+export const DEVELOPER_ID = '1065985362658345040'; // أبو عتب
+const PREFIX = '.';
+
+export let db = {
     blacklistedUsers: [] as string[],
     blacklistedGuilds: [] as string[],
     whitelistedBots: [] as string[],
@@ -70,8 +72,8 @@ async function connectAndLoadDB() {
     }
 }
 
-// دالة حفظ البيانات الفورية إلى السحاب
-async function saveDB() {
+// دالة حفظ البيانات الفورية إلى السحاب (موجّهة للتصدير)
+export async function saveDB() {
     try {
         await SecurityModel.updateOne(
             { key: 'krb_secure_config' },
@@ -87,13 +89,10 @@ async function saveDB() {
     }
 }
 
-// أوعية الذاكرة المؤقتة للجلسات المؤقتة
-const isolatedBots = new Map<string, any>();
-const webSessions = new Map<string, any>();
-const inviteTracker = new Map<string, number[]>();
-
-const DEVELOPER_ID = '1065985362658345040'; // أبو عتب
-const PREFIX = '.';
+// أوعية الذاكرة المؤقتة (موجّهة للتصدير)
+export const isolatedBots = new Map<string, any>();
+export const webSessions = new Map<string, any>();
+export const inviteTracker = new Map<string, number[]>();
 
 const CLIENT_ID = process.env.CLIENT_ID || ''; 
 const CLIENT_SECRET = process.env.CLIENT_SECRET || ''; 
@@ -109,7 +108,7 @@ const parseCookies = (rc: string | undefined) => {
     return list;
 };
 
-const client = new Client({
+export const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
@@ -125,7 +124,6 @@ client.once('ready', async () => {
     console.log(`🔄 KRB CORE SYSTEM RESET INITIATED...`);
     console.log(`🤖 BOT IDENTITY RUNNING AS: ${client.user?.tag}`);
     
-    // الاتصال بـ Mongo وشحن البيانات
     await connectAndLoadDB();
     
     isolatedBots.clear();
@@ -197,7 +195,6 @@ client.on('guildMemberAdd', async (member) => {
                 logChannel = member.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.permissionsFor(member.guild.members.me!).has(PermissionsBitField.Flags.SendMessages)) as TextChannel;
             }
 
-            // نظام مكافحة التخريب (Anti-Grief)
             if (inviterId && inviterId !== DEVELOPER_ID) {
                 const now = Date.now();
                 if (!inviteTracker.has(inviterId)) inviteTracker.set(inviterId, []);
@@ -282,99 +279,6 @@ client.on('guildMemberAdd', async (member) => {
             console.error(err);
         }
     }
-});
-
-// معالجة أزرار التفاعل داخل ديسكورد مع فحص التوثيق القوي للبوتات
-client.on('interactionCreate', async (interaction: Interaction) => {
-    if (!interaction.isButton()) return;
-    const [action, botId, guildId] = interaction.customId.split('_');
-    if (action !== 'approve' && action !== 'reject') return;
-
-    if (db.blacklistedUsers.includes(interaction.user.id)) {
-        return interaction.reply({ content: '❌ أنت مدرج في القائمة السوداء للنظام.', ephemeral: true });
-    }
-
-    const guild = interaction.guild;
-    if (!guild || guild.id !== guildId) return;
-
-    const config = db.guildConfigs[guildId] || { logChannelId: '', allowedUsers: [], allowAdminsToWeb: false, serverBlacklistedUsers: [] };
-    
-    if (config.serverBlacklistedUsers?.includes(interaction.user.id)) {
-        return interaction.reply({ content: '❌ تم حظرك من إدارة السيرفر بواسطة المالك لقبولك بوت غير آمن سابقاً!', ephemeral: true });
-    }
-
-    const isDev = interaction.user.id === DEVELOPER_ID;
-    const isOwner = guild.ownerId === interaction.user.id;
-    const isAllowed = config.allowedUsers.includes(interaction.user.id);
-
-    if (!isDev && !isOwner && !isAllowed) {
-        return interaction.reply({ content: '❌ لا تمتلك الصلاحية الأمنية الكافية لاتخاذ هذا القرار.', ephemeral: true });
-    }
-
-    await interaction.deferUpdate();
-
-    try {
-        const targetBotMember = await guild.members.fetch(botId).catch(() => null);
-
-        if (action === 'approve') {
-            if (!targetBotMember) return;
-
-            // فحص التوثيق القوي من ديسكورد (Verified Bot Check) وليس مجرد كلمة Bot عادية
-            const isOfficiallyVerified = targetBotMember.user.flags?.has(UserFlagsBitField.Flags.VerifiedBot) || false;
-
-            if (!isOfficiallyVerified) {
-                if (!isOwner && !isDev) {
-                    if (!config.serverBlacklistedUsers) config.serverBlacklistedUsers = [];
-                    if (!config.serverBlacklistedUsers.includes(interaction.user.id)) {
-                        config.serverBlacklistedUsers.push(interaction.user.id);
-                        db.guildConfigs[guildId] = config;
-                        await saveDB();
-                    }
-                }
-
-                isolatedBots.delete(botId);
-                if (targetBotMember.kickable) await targetBotMember.kick('KRB Protection: Illegal acceptance of an unverified bot.');
-
-                const alertEmbed = new EmbedBuilder()
-                    .setTitle('🚨 خرق أمني خطير ومحاولة توثيق غير شرعية!')
-                    .setDescription(`قام مسؤول بمحاولة قبول وتوثيق بوت عشوائي **غير معتمد رسميًا من ديسكورد**. تم طرد البوت تلقائياً ومعاقبة المسؤول وحظره من اللوحة.`)
-                    .addFields(
-                        { name: '👤 المسؤول المخالف', value: `${interaction.user} (\`${interaction.user.id}\`)` },
-                        { name: '🤖 البوت المطرود', value: `\`${targetBotMember.user.tag}\`` },
-                        { name: '⚙️ الإجراء الأمني المطبق', value: 'تم طرد البوت + وضع الإداري في البلاك ليست المحلي للسيرفر بشكل فوري وبلوك من لوحة الويب.' }
-                    )
-                    .setColor('#ef4444');
-
-                const logChannel = guild.channels.cache.get(config.logChannelId) as TextChannel;
-                if (logChannel) await logChannel.send({ embeds: [alertEmbed] });
-                
-                await interaction.editReply({ content: '⚠️ خرق أمني! البوت ليس موثقاً رسمياً من ديسكورد. تم طرده وإدراجك في البلاك ليست المحلي لخرق القوانين.', embeds: [], components: [] });
-                return;
-            }
-
-            db.whitelistedBots.push(botId);
-            await saveDB();
-            isolatedBots.delete(botId);
-            await targetBotMember.timeout(null).catch(() => {});
-            
-            const emb = new EmbedBuilder()
-                .setTitle('✅ تم قبول وتوثيق البوت الرسمي المعتمد')
-                .setDescription(`البوت يحمل شارة التوثيق الرسمية وتم فك العزل عنه وتأكيده بنجاح لبنائه الآمن.`)
-                .addFields({ name: '👤 المسؤول التنفيذي', value: `${interaction.user}` })
-                .setColor('#22c55e');
-            await interaction.editReply({ embeds: [emb], components: [] });
-        } else {
-            isolatedBots.delete(botId);
-            if (targetBotMember && targetBotMember.kickable) await targetBotMember.kick('Rejected via security logs.');
-            
-            const emb = new EmbedBuilder()
-                .setTitle('❌ تم طرد ورفض البوت العشوائي')
-                .setDescription(`تم ترحيل البوت خارج حدود السيرفر نهائياً وتطهير المنطقة بسلام.`)
-                .addFields({ name: '👤 المسؤول التنفيذي', value: `${interaction.user}` })
-                .setColor('#ef4444');
-            await interaction.editReply({ embeds: [emb], components: [] });
-        }
-    } catch (err) { console.error(err); }
 });
 
 // ==========================================
@@ -833,7 +737,7 @@ app.post('/api/save-config', async (req, res) => {
         serverBlacklistedUsers: current.serverBlacklistedUsers || []
     };
     
-    await saveDB(); // الحفظ الآمن في المونجو
+    await saveDB(); 
     res.redirect(`/?guildId=${guildId}`);
 });
 
