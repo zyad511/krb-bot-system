@@ -1,10 +1,10 @@
 import { Interaction, ChannelType, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel } from 'discord.js';
-import { client, whitelistedBots, SUPREME_OWNER_ID } from '../index';
+import { client, whitelistedBots } from '../index';
 
 client.on('interactionCreate', async (interaction: Interaction) => {
   if (!interaction.guild || !interaction.isRepliable()) return;
 
-  // فتح التذاكر (مفتوح للجميع: عادي حتى العضو يمديه يضغط ويفتح تكت)
+  // فتح التذاكر (مفتوح للجميع وبدون شروط منعاً لأي تعليق للأعضاء)
   const isTicket = (interaction.isButton() && ['tk_general_btn', 'tk_report_btn'].includes(interaction.customId)) ||
                    (interaction.isStringSelectMenu() && interaction.customId === 'tk_hybrid_menu');
 
@@ -42,15 +42,15 @@ client.on('interactionCreate', async (interaction: Interaction) => {
     return;
   }
 
-  // زر إغلاق التذكرة (مفتوح للجميع داخل الروم)
+  // زر الحذف والتطهير داخل التذكرة (مفتوح للجميع)
   if (interaction.isButton() && interaction.customId === 'close_hybrid_ticket') {
     const channel = interaction.channel as TextChannel;
-    await interaction.reply({ content: '🔳 جاري حذف وتطهير الغرفة...' }).catch(() => {});
+    await interaction.reply({ content: '🔳 جاري حذف وتطهير الغرفة نهائياً...' }).catch(() => {});
     setTimeout(() => channel.delete().catch(() => {}), 1000);
     return;
   }
 
-  // أزرار التحكم بالبوتات المعزولة (مفتوحة للإدارة وأصحاب الصلاحيات للتفاعل)
+  // أزرار لوحة حماية البوتات المعزولة
   if (interaction.isButton()) {
     const [action, botId, guildId] = interaction.customId.split('_');
     if (action !== 'approve' && action !== 'reject') return;
