@@ -1,7 +1,8 @@
 import { Interaction, UserFlagsBitField, EmbedBuilder, TextChannel } from 'discord.js';
 
 // 🔗 ربط وسحب المتغيرات الحية من ملف السيرفر الرئيسي لحل مشكلة الـ Compiler
-import { client, db, saveDB, isolatedBots, DEVELOPER_ID } from '../../apps/api/src/server';
+import { client, db, saveDB, isolatedBots, DEVELOPER_ID } from '../../../api/src/server';
+
 
 // معالجة أزرار التفاعل داخل ديسكورد مع منح الحصانة للمالك والديف
 client.on('interactionCreate', async (interaction: Interaction) => {
